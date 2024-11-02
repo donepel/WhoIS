@@ -1,4 +1,4 @@
-##########################################
+1##########################################
 # WHO IS... pero con esteroides!
 ##########################################
 #version 0.3 Se agrega menu de opciones 31/10/2024
@@ -101,7 +101,6 @@ while (opcion != 99):
     #Opcion 2. NSLookup
     elif opcion==2: 
         print("Aca hacemos looup")
-        #ipval=0
         result = dns.resolver.resolve('mail.google.com', 'CNAME')
         for cnameval in result:
             print('The CNAME target address is :', cnameval.target)
