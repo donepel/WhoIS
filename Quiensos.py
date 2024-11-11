@@ -1,46 +1,78 @@
 ##########################################
 # WHO IS... pero con esteroides!
 ##########################################
-#version 0.3 Se agrega menu de opciones 31/10/2024
-#Version 0.2 Se agrega seleccion de nivel de detalle para el whois 31/10/2024
-#Version inicial 0.1 31/10/2024 
+# Versión 0.4 - Cambio de "Full" a "Completo" y mejora en depuración - 09/11/2024
 
-#### Modulos ####
+import subprocess
+import sys
 import whois
 import ipaddress
-import dns
 import dns.resolver
+
+def install(package):
+    subprocess.check_call([sys.executable, "-m", "pip", "install", package])
+
+modules = {
+    "python-whois": "python-whois",
+    "ipaddress": "ipaddress",
+    "dns": "dnspython",
+}
+
+for module, package in modules.items():
+    try:
+        __import__(module)
+        print(f"'{module}' está instalado.")
+    except ImportError:
+        print(f"'{module}' no está instalado. Instalando...")
+        install(package)
 
 #### Funciones ####
 def es_ip_privada(direccion_ip):
-    ip = ipaddress.ip_address(direccion_ip)
-    return ip.is_private
+    try:
+        ip = ipaddress.ip_address(direccion_ip)
+        return ip.is_private
+    except ValueError:
+        return False
 
 def es_ip(direccion):
     try:
         ipaddress.ip_address(direccion)
-        return True  # Es una IP
+        return True
     except ValueError:
-        return False  # Es un dominio
+        return False
 
-def obtener_info_whois(objetivo,datos):
+def obtener_info_whois(objetivo, datos):
+    try:
+        resultado = whois.whois(objetivo)
+        
+        # Imprimir resultado para depuración
+        print("Resultado WHOIS (depuración):", resultado)
+
         if datos == 2:
-            print("info acotada")
-            try:
-                resultado = whois.whois(objetivo)
-                info = {
-                    "Domain Name": resultado.domain_name,
-                    "Name Servers": resultado.name_servers,
-                    "Expiration Date": resultado.expiration_date,
-                    "Creation Date": resultado.creation_date,
-                }
-                return info
-            except Exception as e:
-                return f"Error al obtener información WHOIS: {e}"
-                
+            info = {
+                "Domain Name": resultado.domain_name,
+                "Name Servers": resultado.name_servers,
+                "Expiration Date": resultado.expiration_date,
+                "Creation Date": resultado.creation_date,
+            }
+            return info
         elif datos == 1:
-                resultado = whois.whois(objetivo)
-                return resultado
+            # Emulación de un nivel de detalle "Completo" con los campos de interés
+            info_completo = {
+                "Domain Name": resultado.domain_name,
+                "Registrar": resultado.registrar,
+                "Whois Server": resultado.whois_server,
+                "Referral URL": resultado.referral_url,
+                "Updated Date": resultado.updated_date,
+                "Creation Date": resultado.creation_date,
+                "Expiration Date": resultado.expiration_date,
+                "Name Servers": resultado.name_servers,
+                "Status": resultado.status,
+                "Emails": resultado.emails
+            }
+            return info_completo
+    except Exception as e:
+        return f"Error al obtener información WHOIS: {e}"
 
 def mostrar_info(info):
     if isinstance(info, dict):
@@ -49,67 +81,72 @@ def mostrar_info(info):
     else:
         print(info)
 
-    
 def mostrar_menu():
-    print ("*"*10)
+    print("*" * 10)
     print("Opciones: \n")
-    print ("   1. Who Is")
-    print ("   2. NSLookup")
-    print ("   99. Salir")
+    print("   1. Who Is")
+    print("   2. NSLookup")
+    print("   99. Salir")
     print("")
-    #verificacion que la opcion ingresada sea numerica
     try:
-        opcion_seleccionada = int(input("Ingrese una opcion: "))
+        opcion_seleccionada = int(input("Ingrese una opción: "))
     except ValueError:
-        opcion_seleccionada=0
-    else:
-        opcion_seleccionada=opcion_seleccionada
+        opcion_seleccionada = 0
     return opcion_seleccionada
 
-
 ################ PROGRAMA ###########################
-print ("#","+"*40,"#")
-print ("#       Sistema de analisis de IP's        #")
-print ("#","+"*40,"#")
+print("#", "+" * 40, "#")
+print("#       Sistema de análisis de IP's        #")
+print("#", "+" * 40, "#")
 print("")
+
 opcion = 0
+while opcion != 99:
+    opcion = mostrar_menu()
 
-while (opcion != 99):
-    opcion=mostrar_menu() 
-
-    #Opciones del menu
-
-    #Opcion 1.WHO IS
-    if opcion == 1: 
-        objetivo = input("Ingrese la dirección IP o dominio: ")
-        detalle = int(input("Ingrede el nivel de detalle:\n1) Full \n2) Acotado\nElija su opcion deseada: "))
-        # Verifica si es una IP o un dominio y actúa en consecuencia
+    # Opciones del menú
+    if opcion == 1:
+        objetivo = input("Ingrese la dirección IP o dominio: ").strip()
+        while True:
+            try:
+                detalle = int(input("Ingrese el nivel de detalle:\n1) Completo \n2) Acotado\nElija su opción deseada: "))
+                if detalle in [1, 2]:
+                    break
+                else:
+                    print("Seleccione una opción válida (1 o 2).")
+            except ValueError:
+                print("Entrada inválida. Por favor, ingrese un número (1 o 2).")
+        
         if es_ip(objetivo):
             print(f"{objetivo} es una dirección IP.")
-            if es_ip_privada(objetivo):  # Es una IP privada
+            if es_ip_privada(objetivo):
                 print(f"La dirección {objetivo} pertenece a un segmento privado.\n")
-            else:  # Es una IP pública
-                info = obtener_info_whois(objetivo,detalle)
+            else:
+                info = obtener_info_whois(objetivo, detalle)
                 print("Información WHOIS para IP pública:\n")
                 mostrar_info(info)
         else:
             print(f"{objetivo} es un dominio.")
-            info = obtener_info_whois(objetivo,detalle)
+            info = obtener_info_whois(objetivo, detalle)
             print("Información WHOIS para el dominio:\n")
             mostrar_info(info)
-    
-    #Opcion 2. NSLookup
-    elif opcion==2: 
-        print("Aca hacemos looup")
-        result = dns.resolver.resolve('mail.google.com', 'CNAME')
-        for cnameval in result:
-            print('The CNAME target address is :', cnameval.target)
 
-    #Opcion 99. Salir
-    elif opcion == 99: 
-        print ("Muchas gracias por utilizar nuestro sistema\nAdios!")
+    elif opcion == 2:
+        dominio = input("Ingrese el dominio para hacer NSLookup: ").strip()
+        try:
+            result = dns.resolver.resolve(dominio, 'CNAME')
+            for cnameval in result:
+                print('El objetivo CNAME es:', cnameval.target)
+        except dns.resolver.NoAnswer:
+            print("No se encontraron registros CNAME para este dominio.")
+        except dns.resolver.NXDOMAIN:
+            print("El dominio no existe.")
+        except Exception as e:
+            print(f"Error en NSLookup: {e}")
+
+    elif opcion == 99:
+        print("Muchas gracias por utilizar nuestro sistema\nAdios!")
         break
-    
-    #Opcion incorrecta
+
     else:
-        print("Opcion incorrecta, por favor intente nuevamente\n")
+        print("Opción incorrecta, por favor intente nuevamente\n")
