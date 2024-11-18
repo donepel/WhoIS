@@ -1,152 +1,214 @@
 ##########################################
-# WHO IS... pero con esteroides!
+# Like WHO IS... but with steroids!
 ##########################################
-# Versión 0.4 - Cambio de "Full" a "Completo" y mejora en depuración - 09/11/2024
-
+# MODULE IMPORTS
 import subprocess
 import sys
 import whois
 import ipaddress
 import dns.resolver
 
+# Colors for output formatting
+MAGENTA = "\033[35m"
+RESET = "\033[0m"
+GREEN = "\033[32m"
+
+# FUNCTIONS
 def install(package):
+    """
+    Installs the given package using pip.
+    """
     subprocess.check_call([sys.executable, "-m", "pip", "install", package])
 
+# Required modules and their corresponding pip packages
 modules = {
     "python-whois": "python-whois",
     "ipaddress": "ipaddress",
     "dns": "dnspython",
 }
 
+# Check and install missing modules
 for module, package in modules.items():
     try:
         __import__(module)
-        print(f"'{module}' está instalado.")
+        print(f"'{module}' is already installed.")
     except ImportError:
-        print(f"'{module}' no está instalado. Instalando...")
+        print(f"'{module}' is not installed. Installing...")
         install(package)
 
-#### Funciones ####
-def es_ip_privada(direccion_ip):
+def is_private_ip(ip_address):
+    """
+    Determines if an IP address belongs to a private range.
+    """
     try:
-        ip = ipaddress.ip_address(direccion_ip)
+        ip = ipaddress.ip_address(ip_address)
         return ip.is_private
     except ValueError:
         return False
 
-def es_ip(direccion):
+def is_ip(address):
+    """
+    Validates whether a string is a valid IP address.
+    """
     try:
-        ipaddress.ip_address(direccion)
+        ipaddress.ip_address(address)
         return True
     except ValueError:
         return False
 
-def obtener_info_whois(objetivo, datos):
+def whois_report(target, detail_level):
+    """
+    Fetches WHOIS information for a domain or IP.
+    
+    Args:
+        target (str): The domain or IP address to query.
+        detail_level (int): 1 for full details, 2 for summarized details.
+    
+    Returns:
+        dict or str: WHOIS information or an error message.
+    """
     try:
-        resultado = whois.whois(objetivo)
-        
-        # Imprimir resultado para depuración
-        print("Resultado WHOIS (depuración):", resultado)
-
-        if datos == 2:
+        result = whois.whois(target)
+        if detail_level == 2:  # Summarized details
             info = {
-                "Domain Name": resultado.domain_name,
-                "Name Servers": resultado.name_servers,
-                "Expiration Date": resultado.expiration_date,
-                "Creation Date": resultado.creation_date,
+                "Domain Name": result.domain_name,
+                "Name Servers": result.name_servers,
+                "Expiration Date": result.expiration_date,
+                "Creation Date": result.creation_date,
             }
             return info
-        elif datos == 1:
-            # Emulación de un nivel de detalle "Completo" con los campos de interés
-            info_completo = {
-                "Domain Name": resultado.domain_name,
-                "Registrar": resultado.registrar,
-                "Whois Server": resultado.whois_server,
-                "Referral URL": resultado.referral_url,
-                "Updated Date": resultado.updated_date,
-                "Creation Date": resultado.creation_date,
-                "Expiration Date": resultado.expiration_date,
-                "Name Servers": resultado.name_servers,
-                "Status": resultado.status,
-                "Emails": resultado.emails
-            }
-            return info_completo
+        elif detail_level == 1:  # Full details
+            full_info = {k: v for k, v in result.items() if v}
+            return full_info
     except Exception as e:
-        return f"Error al obtener información WHOIS: {e}"
+        return f"Error fetching WHOIS information: {e}"
 
-def mostrar_info(info):
+def nslookup_report(domain):
+    """
+    Performs an NSLookup on a domain and retrieves DNS records.
+    
+    Args:
+        domain (str): The domain to query.
+    
+    Returns:
+        dict: A dictionary containing various DNS records.
+    """
+    dns_info = {"CNAME": [], "A": [], "MX": [], "TXT": [], "AAAA": []}
+    try:
+        # Query CNAME
+        try:
+            result_cname = dns.resolver.resolve(domain, 'CNAME')
+            dns_info["CNAME"] = [cnameval.target.to_text() for cnameval in result_cname]
+        except dns.resolver.NoAnswer:
+            pass
+        
+        # Query A
+        try:
+            result_a = dns.resolver.resolve(domain, 'A')
+            dns_info["A"] = [a.to_text() for a in result_a]
+        except dns.resolver.NoAnswer:
+            pass
+        
+        # Query MX
+        try:
+            result_mx = dns.resolver.resolve(domain, 'MX')
+            dns_info["MX"] = [(mx.exchange.to_text(), mx.preference) for mx in result_mx]
+        except dns.resolver.NoAnswer:
+            pass
+        
+        # Query TXT
+        try:
+            result_txt = dns.resolver.resolve(domain, 'TXT')
+            dns_info["TXT"] = [txt.to_text() for txt in result_txt]
+        except dns.resolver.NoAnswer:
+            pass
+
+        # Query AAAA
+        try:
+            result_aaaa = dns.resolver.resolve(domain, 'AAAA')
+            dns_info["AAAA"] = [aaaa.to_text() for aaaa in result_aaaa]
+        except dns.resolver.NoAnswer:
+            pass
+
+    except dns.resolver.NXDOMAIN:
+        return {"Error": "The domain does not exist."}
+    except Exception as e:
+        return {"Error": str(e)}
+    
+    return dns_info
+
+def display_info(info):
+    """
+    Displays information in a formatted way.
+    
+    Args:
+        info (dict or str): The information to display.
+    """
     if isinstance(info, dict):
-        for clave, valor in info.items():
-            print(f"{clave}: {valor}\n")
+        for key, value in info.items():
+            if isinstance(value, list):
+                value = ", ".join(map(str, value))
+            print(f"{MAGENTA}{key}: {value}{RESET}")
     else:
         print(info)
 
-def mostrar_menu():
-    print("*" * 10)
-    print("Opciones: \n")
-    print("   1. Who Is")
-    print("   2. NSLookup")
-    print("   99. Salir")
+def display_menu():
+    """
+    Displays the main menu and returns the user's selection.
+    """
+    print(f"{GREEN}Options:{RESET}")
+    print(f"{GREEN}   1. WHOIS Query{RESET}")
+    print(f"{GREEN}   2. NSLookup{RESET}")
+    print(f"{GREEN}   9. FULL Report (WHOIS + NSLookup){RESET}")
+    print(f"{GREEN}   99. Exit{RESET}")
     print("")
     try:
-        opcion_seleccionada = int(input("Ingrese una opción: "))
+        selected_option = int(input("Please select an option: "))
     except ValueError:
-        opcion_seleccionada = 0
-    return opcion_seleccionada
+        selected_option = 0
+    return selected_option
 
-################ PROGRAMA ###########################
+# PROGRAM
+print(f"{GREEN}#", "+" * 40, "#")
+print("#       IP Analysis System                #")
+print("#          by Don_Epel                   #")
 print("#", "+" * 40, "#")
-print("#       Sistema de análisis de IP's        #")
-print("#", "+" * 40, "#")
-print("")
+print("Version 0.2 18/11/2024")
+print(f"{RESET}")
 
-opcion = 0
-while opcion != 99:
-    opcion = mostrar_menu()
+option = 0
+while option != 99:
+    # Show the main menu
+    option = display_menu()
 
-    # Opciones del menú
-    if opcion == 1:
-        objetivo = input("Ingrese la dirección IP o dominio: ").strip()
-        while True:
-            try:
-                detalle = int(input("Ingrese el nivel de detalle:\n1) Completo \n2) Acotado\nElija su opción deseada: "))
-                if detalle in [1, 2]:
-                    break
-                else:
-                    print("Seleccione una opción válida (1 o 2).")
-            except ValueError:
-                print("Entrada inválida. Por favor, ingrese un número (1 o 2).")
+    if option == 1:  # WHOIS Query
+        target = input("Enter the IP address or domain: ").strip()
+        detail_level = int(input("Select detail level:\n1) Full \n2) Summary\nEnter your choice: "))
+        info = whois_report(target, detail_level)
+        print(f"{GREEN}WHOIS Report:{RESET}")
+        display_info(info)
+
+    elif option == 2:  # NSLookup
+        domain = input("Enter the domain for NSLookup: ").strip()
+        dns_info = nslookup_report(domain)
+        print(f"{GREEN}NSLookup Report:{RESET}")
+        display_info(dns_info)
+
+    elif option == 9:  # FULL Report
+        target = input("Enter the IP address or domain: ").strip()
+        detail_level = 1  # Always full detail for WHOIS in FULL Report
+        print(f"{GREEN}\nWHOIS Report:{RESET}")
+        info = whois_report(target, detail_level)
+        display_info(info)
         
-        if es_ip(objetivo):
-            print(f"{objetivo} es una dirección IP.")
-            if es_ip_privada(objetivo):
-                print(f"La dirección {objetivo} pertenece a un segmento privado.\n")
-            else:
-                info = obtener_info_whois(objetivo, detalle)
-                print("Información WHOIS para IP pública:\n")
-                mostrar_info(info)
-        else:
-            print(f"{objetivo} es un dominio.")
-            info = obtener_info_whois(objetivo, detalle)
-            print("Información WHOIS para el dominio:\n")
-            mostrar_info(info)
+        if not is_ip(target):  # NSLookup only applies to domains
+            print(f"{GREEN}\nNSLookup Report:{RESET}")
+            dns_info = nslookup_report(target)
+            display_info(dns_info)
 
-    elif opcion == 2:
-        dominio = input("Ingrese el dominio para hacer NSLookup: ").strip()
-        try:
-            result = dns.resolver.resolve(dominio, 'CNAME')
-            for cnameval in result:
-                print('El objetivo CNAME es:', cnameval.target)
-        except dns.resolver.NoAnswer:
-            print("No se encontraron registros CNAME para este dominio.")
-        except dns.resolver.NXDOMAIN:
-            print("El dominio no existe.")
-        except Exception as e:
-            print(f"Error en NSLookup: {e}")
-
-    elif opcion == 99:
-        print("Muchas gracias por utilizar nuestro sistema\nAdios!")
+    elif option == 99:  # Exit
+        print("Thanks for using my program. Take care!")
         break
 
     else:
-        print("Opción incorrecta, por favor intente nuevamente\n")
+        print("Invalid option. Please try again.\n")
